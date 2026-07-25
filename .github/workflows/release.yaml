@@ -62,6 +62,7 @@ jobs:
             type=semver,pattern={{major}}.{{minor}}
             type=semver,pattern={{major}}
             type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=${{ inputs.tag }},enable=${{ github.event_name == 'workflow_dispatch' && inputs.tag != '' }}
           labels: |
             org.opencontainers.image.title=Rota Core
             org.opencontainers.image.description=Rota proxy rotation service
@@ -99,6 +100,7 @@ jobs:
             type=semver,pattern={{major}}.{{minor}}
             type=semver,pattern={{major}}
             type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=${{ inputs.tag }},enable=${{ github.event_name == 'workflow_dispatch' && inputs.tag != '' }}
           labels: |
             org.opencontainers.image.title=Rota Dashboard
             org.opencontainers.image.description=Rota web dashboard
@@ -142,15 +144,25 @@ jobs:
       - name: Generate changelog
         id: changelog
         run: |
+          # Determine target release tag
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ inputs.tag }}" ]; then
+            CURRENT_TAG="${{ inputs.tag }}"
+          else
+            CURRENT_TAG="${{ github.ref_name }}"
+          fi
+
+          # Ensure tag doesn't start with refs/
+          CURRENT_TAG=${CURRENT_TAG#refs/tags/}
+          CURRENT_TAG=${CURRENT_TAG#refs/heads/}
+
           # Get previous tag
           PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
-          CURRENT_TAG=${GITHUB_REF#refs/tags/}
 
           # Generate changelog
-          if [ -z "$PREV_TAG" ]; then
-            CHANGELOG=$(git log --pretty=format:"- %s (%h)" $CURRENT_TAG)
+          if [ -z "$PREV_TAG" ] || [ "$PREV_TAG" = "$CURRENT_TAG" ]; then
+            CHANGELOG=$(git log -n 10 --pretty=format:"- %s (%h)")
           else
-            CHANGELOG=$(git log --pretty=format:"- %s (%h)" $PREV_TAG..$CURRENT_TAG)
+            CHANGELOG=$(git log --pretty=format:"- %s (%h)" $PREV_TAG..HEAD)
           fi
 
           # Write to file to handle multiline
