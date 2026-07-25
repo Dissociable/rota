@@ -52,8 +52,8 @@ jobs:
           # write access (Package settings → Manage Actions access).
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract metadata (tags, labels)
-        id: meta
+      - name: Extract metadata for Core (tags, labels)
+        id: meta-core
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
@@ -67,26 +67,63 @@ jobs:
             org.opencontainers.image.description=Rota proxy rotation service
             org.opencontainers.image.vendor=${{ github.repository_owner }}
 
-      - name: Build and push Docker image
-        id: push
+      - name: Build and push Core Docker image
+        id: push-core
         uses: docker/build-push-action@v6
         with:
           context: ./core
           file: ./core/Dockerfile
           platforms: linux/amd64,linux/arm64
           push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          tags: ${{ steps.meta-core.outputs.tags }}
+          labels: ${{ steps.meta-core.outputs.labels }}
+          cache-from: type=gha,scope=core
+          cache-to: type=gha,mode=max,scope=core
           sbom: true
           provenance: mode=max
 
-      - name: Generate artifact attestation
+      - name: Generate Core artifact attestation
         uses: actions/attest-build-provenance@v2
         with:
           subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          subject-digest: ${{ steps.push.outputs.digest }}
+          subject-digest: ${{ steps.push-core.outputs.digest }}
+          push-to-registry: true
+
+      - name: Extract metadata for Dashboard (tags, labels)
+        id: meta-dashboard
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-dashboard
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=raw,value=latest,enable={{is_default_branch}}
+          labels: |
+            org.opencontainers.image.title=Rota Dashboard
+            org.opencontainers.image.description=Rota web dashboard
+            org.opencontainers.image.vendor=${{ github.repository_owner }}
+
+      - name: Build and push Dashboard Docker image
+        id: push-dashboard
+        uses: docker/build-push-action@v6
+        with:
+          context: ./dashboard
+          file: ./dashboard/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta-dashboard.outputs.tags }}
+          labels: ${{ steps.meta-dashboard.outputs.labels }}
+          cache-from: type=gha,scope=dashboard
+          cache-to: type=gha,mode=max,scope=dashboard
+          sbom: true
+          provenance: mode=max
+
+      - name: Generate Dashboard artifact attestation
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-dashboard
+          subject-digest: ${{ steps.push-dashboard.outputs.digest }}
           push-to-registry: true
 
   create-release:
